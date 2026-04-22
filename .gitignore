@@ -163,6 +163,11 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# 泰迪杯 / finance_agent_rag：赛题附件与解析缓存体积大，本机解压后使用，勿提交
+finance_agent_rag/data/*
+!finance_agent_rag/data/.gitkeep
+finance_agent_rag/output/
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
