@@ -51,6 +51,6 @@ python main.py
 
 ## 你仍需实现（赛题专用）
 
-- `core/database/`：按附件3 建表、抽数、校验、MySQL
-- `agents/`、`memory/`、`pipeline/`：Text-to-SQL、多轮、澄清、出图、任务三多意图与 `references`
+- `core/database/`：**建表**与 **MySQL** 已具备；任务一抽数为 **规则**（`core/extraction/rule_task1.py`），可按赛题继续调关键词与报告期推断。  
+- `agents/`、`memory/`、`pipeline/task2_pipeline.py`、`task3_pipeline.py`：Text-to-SQL、多轮、澄清、出图、任务三多意图与 `references`  
 - `output/`：附件7 规定的 json/xlsx/图片

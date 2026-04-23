@@ -13,7 +13,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-大模型：在 `.env` 或系统环境变量中配置 **智谱 `GLM_API_KEY`（或 `ZHIPU_API_KEY`）** 与 **`BGE_API_KEY`**（见 `.env.example`）；**不**使用 OpenAI 官方 API。依赖见 `requirements.txt`。
+任务一入库**不调用**大模型抽数（见 `pipeline/task1_pipeline.py` 与 `core/extraction/rule_task1.py`）。任务二/三及向量检索：在 `.env` 中配置 **智谱 `GLM_API_KEY`（或 `ZHIPU_API_KEY`）** 与 **`BGE_API_KEY`**（见 `.env.example`）；**不**使用 OpenAI 官方 API。依赖见 `requirements.txt`。
 
 ## License
 

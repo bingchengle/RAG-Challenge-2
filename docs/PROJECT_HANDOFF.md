@@ -9,7 +9,7 @@
 
 | 赛题方向 | 代码入口 / 说明 |
 |----------|----------------|
-| **任务一** | 财报 PDF → 解析 → 大模型抽四表字段 → 校验 → **MySQL** 入库 |
+| **任务一** | 财报 PDF → Docling 解析 → **规则从表格抽四表字段**（无 LLM）→ 校验 → **MySQL** 入库 |
 | **任务二** | 自然语言问数（附件4）、SQL、多轮、澄清、出图 → `task2.json`、`result_2.xlsx` |
 | **任务三** | 库内查数 + 研报 RAG、多意图、归因、表格 references → `result_3.xlsx` 等 |
 
@@ -25,7 +25,7 @@ finance_agent_rag/
 ├── config.py                 # BUNDLE 路径、示例/全量切换、附件路径、输出路径
 ├── core/
 │   ├── database/             # schema.sql、db、loader、data_check、schema_fields
-│   ├── extraction/           # 附件1 索引、文件名身份、长文本、GLM 任务一抽数
+│   ├── extraction/           # 附件1 索引、文件名身份、长文本、规则抽数 `rule_task1`、身份合并 `task1_payload`
 │   └── pdf_parser/           # Docling PDFParser、表序列化、合并工具
 ├── llm/                      # 智谱 GLM + BGE 环境、api_requests、prompts、并行处理
 ├── rag/                      # 向量/BM25、检索、重排、generator（QuestionsProcessor）
@@ -55,8 +55,8 @@ finance_agent_rag/
 2. **`parse_pdf_identity`**：从文件名取 6 位代码 / 深交简称、辅助报告期等。  
 3. **`build_lookup` + `resolve_stock`**：用 **附件1** Excel 将代码/简称解析为 `(stock_code, stock_abbr)`。  
 4. **`PDFParser`**（Docling）：输出 JSON 到 **`PARSED_REPORTS_DIR`/`{pdf_stem}.json`**，有缓存则跳过。  
-5. **`flatten_report_to_text`**：正文块 + 表格区 **Markdown** 拼长文本（有长度上限）。  
-6. **`extract_financial_payload` + `apply_identity_to_tables`**：GLM 按 `schema_fields` 抽四表 + 主键/报告期。  
+5. **`flatten_report_to_text`**：正文块 + 表格区 **Markdown**（`only_parse` 时用于测长度；抽数以表格 **Markdown 解析** 为主）。  
+6. **`rule_task1.extract_financial_payload_from_report`**：从解析 JSON 的 `tables` 行匹配中文字段 + **`task1_payload.apply_identity_to_tables`** 补全主键/报告期（报告期：正文正则 + 深交所 hint + 上交披露日**粗回退**）。  
 7. **`data_check.check_payload_for_upsert`**：主键、**报告期**（如 `2023Q1`、`2022HY`、`2021FY`）、四表一致等。  
 8. **`loader.upsert_all_tables`**：`INSERT ... ON DUPLICATE KEY UPDATE` 写四表。
 
@@ -73,13 +73,13 @@ finance_agent_rag/
 # 小样本
 set TEDDY_USE_SAMPLE=1
 
-# 仅解析（不调用 GLM / 不写库）— 用于验证 Docling
+# 仅解析（不抽数 / 不写库）— 用于验证 Docling
 python -m finance_agent_rag.pipeline.task1_pipeline -n 1 --only-parse
 
-# 抽数+校验，但不写入 MySQL（需 GLM）
+# 抽数+校验，但不写入 MySQL（不调用大模型；若报告期仍推断失败会校验报错）
 python -m finance_agent_rag.pipeline.task1_pipeline -n 1 --skip-db
 
-# 全链路（需 GLM + TEDDY_MYSQL_DSN）
+# 全链路（需 TEDDY_MYSQL_DSN；任务一**不依赖** GLM/BGE API）
 python -m finance_agent_rag.pipeline.task1_pipeline -n 1
 ```
 
@@ -92,7 +92,7 @@ python -m finance_agent_rag.pipeline.task1_pipeline -n 1
 
 - **仓库结构**：`finance_agent_rag` 包、根 `main.py` / `setup.py` / `requirements.txt` / `.env.example`、`.gitignore`（**大体积 `data/*` 与 `output` 不提交**）。  
 - **任务一**：
-  - `core/extraction/`：公司索引、报告身份、长文本、**llm_task1**（JSON 模式抽数 + 与身份合并）。  
+  - `core/extraction/`：公司索引、报告身份、**`rule_task1`** 表格规则抽数、**`task1_payload`** 与身份合并；`llm_task1` 仅作兼容 re-export。  
   - `core/database/`：`schema.sql`、`schema_fields.py`、**loader**、**data_check**（入库前强校验；`run_all_checks` 仍为全库级占位）。  
   - **`pipeline/task1_pipeline.py`**：上述全流程 + **`only_parse` / `skip_upsert`** 小测开关。  
 - **RAG/LLM 基座**：`llm/`、`rag/`、`core/pdf_parser/` 自原 RAG Challenge 迁移；`QuestionsProcessor` 等仍在包内。  
@@ -111,17 +111,19 @@ python -m finance_agent_rag.pipeline.task1_pipeline -n 1
 
 1. Python 3.10+、创建 venv，`pip install -r requirements.txt`，`pip install -e .`。  
 2. 安装/配置 **MySQL**，执行 `finance_agent_rag/core/database/schema.sql`。  
-3. 配置 **`.env`**（`GLM`/`ZHIPU`、`BGE`、`TEDDY_MYSQL_DSN`）。  
+3. 配置 **`.env`** 至少含 **`TEDDY_MYSQL_DSN`**；任务一抽数不调用 GLM，但任务二/三若在本机跑，仍要配 `GLM`/`BGE`（见 `.env.example`）。  
 4. 放置赛题数据；**示例**：`set TEDDY_USE_SAMPLE=1`。  
 5. **Docling 依赖 PyTorch / EasyOCR**：有 GPU 可装带 CUDA 的 `torch`；无 GPU 用 CPU 版。若 Windows 出现 **`c10.dll` / Error 1114**，安装 **VC++ 2015–2022 x64 运行库** 或从 [pytorch.org](https://pytorch.org) 装 **CPU 官方轮**。  
 6. 先 **`-n 1 --only-parse`**，再 **`--skip-db`**，最后全链路。
 
 ### 5.2 任务一可深化项
 
+- 在 **`rule_task1.py`** 中扩充**行名关键词**、改进表类型打分，提高抽全率。  
 - 上交/深交**个别文件名**未匹配时，补充规则或回退策略。  
+- **`infer_report_period`**：正文抽不到时依赖披露日**粗回退**，可按赛题再细化。  
 - `data_check.run_all_checks()`：**跨表/跨行**一致性（若赛题有自动评分细则）。  
-- 解析/抽数**失败重试、日志与统计**、批量**并行**（注意 API 与 DB 限流）。  
-- `finance_agent_rag/README.md` 中「database 待实现」类表述**已过时**；可改为指向本 handoff 与 `task1_pipeline`。
+- 解析/抽数**失败重试、日志与统计**、批量**并行**（注意 DB 并发）。  
+- `finance_agent_rag/README.md` 中部分「待实现」表述可能已过时；以本 handoff 为准。
 
 ### 5.3 任务二、任务三
 
@@ -153,7 +155,8 @@ python -m finance_agent_rag.pipeline.task1_pipeline -n 1
 |------|------|
 | 全局配置 | `finance_agent_rag/config.py` |
 | 任务一 | `finance_agent_rag/pipeline/task1_pipeline.py` |
-| GLM 抽数 | `finance_agent_rag/core/extraction/llm_task1.py` |
+| 规则抽数 | `finance_agent_rag/core/extraction/rule_task1.py` |
+| 身份合并 | `finance_agent_rag/core/extraction/task1_payload.py` |
 | 长文本 | `finance_agent_rag/core/extraction/text_flatten.py` |
 | 建表 SQL | `finance_agent_rag/core/database/schema.sql` |
 | 入库 | `finance_agent_rag/core/database/loader.py` |

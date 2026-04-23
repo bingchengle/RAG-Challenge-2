@@ -1,5 +1,5 @@
 """
-任务一：财报 PDF → Docling 解析缓存 → 长文本 → GLM 抽数 → 校验 → MySQL UPSERT。
+任务一：财报 PDF → Docling 解析缓存 → 规则抽数（无 LLM）→ 校验 → MySQL UPSERT。
 """
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ from typing import Optional
 
 from finance_agent_rag import config
 from finance_agent_rag.core.database import data_check, loader
-from finance_agent_rag.core.extraction import llm_task1
+from finance_agent_rag.core.extraction import rule_task1
 from finance_agent_rag.core.extraction.company_index import build_lookup, resolve_stock
 from finance_agent_rag.core.extraction.report_identity import Exchange, parse_pdf_identity
+from finance_agent_rag.core.extraction.task1_payload import apply_identity_to_tables
 from finance_agent_rag.core.extraction.text_flatten import flatten_report_to_text, load_json
 from finance_agent_rag.core.pdf_parser.parser import PDFParser
 
@@ -64,10 +65,12 @@ def run(
     """
     遍历上交所、深交所报告目录。返回成功完成的文件数（跳过/失败不累计）。
 
-    - only_parse: 为 True 时仅 Docling 解析 + 长文本（测解析链，不调用 GLM / 库）。
-    - skip_upsert: 为 True 时做抽数 + 校验但**不写** MySQL（需 GLM）。
+    - only_parse: 为 True 时仅 Docling 解析 + 长文本（测解析链，不抽数/不写库）。
+    - skip_upsert: 为 True 时做抽数 + 校验但**不写** MySQL。
 
     环境变量：TEDDY_TASK1_ONLY_PARSE=1、TEDDY_TASK1_SKIP_DB=1 与上述两参数等价（便于命令行小测）。
+
+    抽数走 `rule_task1.extract_financial_payload_from_report`（**不调用**大模型）。
     """
     if os.environ.get("TEDDY_TASK1_ONLY_PARSE", "0") == "1":
         only_parse = True
@@ -106,8 +109,10 @@ def run(
                 )
                 ok += 1
                 continue
-            raw = llm_task1.extract_financial_payload(text, identity, code, abbr)
-            payload = llm_task1.apply_identity_to_tables(raw, code, abbr, identity)
+            raw = rule_task1.extract_financial_payload_from_report(
+                report_data, identity
+            )
+            payload = apply_identity_to_tables(raw, code, abbr, identity)
             data_check.check_payload_for_upsert(payload)
             if skip_upsert:
                 _log.info("skip_upsert: 校验通过，未写库")
@@ -122,14 +127,14 @@ def run(
 if __name__ == "__main__":
     import argparse
 
-    p = argparse.ArgumentParser(description="任务一：财报抽数入库")
+    p = argparse.ArgumentParser(description="任务一：规则抽数入库（无 LLM）")
     p.add_argument(
         "-n", "--max-files", type=int, default=None, help="最多处理 N 个 PDF（小测）"
     )
     p.add_argument(
         "--only-parse",
         action="store_true",
-        help="只跑 Docling 解析+长文本，不调用 GLM / MySQL",
+        help="只跑 Docling 解析+长文本，不抽数/不写库",
     )
     p.add_argument(
         "--skip-db",

@@ -1,4 +1,4 @@
-"""四张表字段名（与 schema.sql 一致，供 loader / LLM 提示）。"""
+"""四张表字段名（与 schema.sql 一致，供 loader / 规则或提示词）。"""
 
 CORE_PERF = [
     "serial_number",
