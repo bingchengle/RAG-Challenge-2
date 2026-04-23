@@ -159,6 +159,7 @@ python -m finance_agent_rag.pipeline.task1_pipeline -n 1
 | 入库 | `finance_agent_rag/core/database/loader.py` |
 | 校验 | `finance_agent_rag/core/database/data_check.py` |
 | 环境样例 | `.env.example` |
+| 新机连 MySQL（本机/远程/防火墙） | [`docs/MYSQL_CONNECT.md`](MYSQL_CONNECT.md) |
 
 ---
 
